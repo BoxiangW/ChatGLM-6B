@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 from tqdm.auto import tqdm
 
+import torch.profiler
+
 
 # Integrations must be imported before ML frameworks:
 # isort: off
@@ -338,6 +340,12 @@ class Trainer:
         # set the correct log level depending on the node
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
+
+        self.prof = torch.profiler.profile(
+                    schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
+                    record_shapes=True,
+                    with_stack=True)
 
         # force device and distributed setup init explicitly
         args._setup_devices
@@ -1642,6 +1650,8 @@ class Trainer:
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
+        self.prof.stop()
+        
         self._train_batch_size = batch_size
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1984,6 +1994,7 @@ class Trainer:
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
+                prof.step()
             if step < 0:
                 logger.warning(
                     "There seems to be not a single sample in your epoch_iterator, stopping training at step"
@@ -2049,6 +2060,8 @@ class Trainer:
                     shutil.rmtree(checkpoint)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        self.prof.stop()
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
