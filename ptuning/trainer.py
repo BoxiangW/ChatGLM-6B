@@ -1650,7 +1650,7 @@ class Trainer:
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
-        self.prof.stop()
+        self.prof.start()
         
         self._train_batch_size = batch_size
         # Data loader and number of training steps
